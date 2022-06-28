@@ -106,6 +106,8 @@ parse_multiverse <- function(.multiverse, .expr, .code, .label) {
 parse_multiverse_expr <- function(multiverse, .expr, .param_options, all_conditions, .parent_block) {
   .m_obj <- attr(multiverse, "multiverse")
   .super_env <- attr(multiverse, "multiverse_super_env")
+  .universe_sampling_fn <- attr(multiverse, "universe_sampling_fn")
+  if (is.null(.universe_sampling_fn)) {.universe_sampling_fn <- identity}
   
   if (is_empty(all_conditions)) {
     all_conditions <- expr(TRUE) 
@@ -124,8 +126,14 @@ parse_multiverse_expr <- function(multiverse, .expr, .param_options, all_conditi
     df <- filter(df, eval(all_conditions))
     n <- ifelse(nrow(df), nrow(df), 1)
     
-    lapply(seq_len(n), function(i) {
+    #browser()
+    .valid_universes <- .universe_sampling_fn(seq_len(n))
+    attr(multiverse, "valid_universes") <- .valid_universes
+    
+    lapply(.valid_universes, function(i) {
       .p <- lapply(df, "[[", i)
+      
+      #browser()
       
       list(
         env = new.env(parent = .super_env),
@@ -135,6 +143,7 @@ parse_multiverse_expr <- function(multiverse, .expr, .param_options, all_conditi
       )
     })
   } else {
+    warning("layers that aren't sampled correctly, oops")
     parents <- .m_obj$multiverse_diction$get(.parent_block)
     
     q <- lapply(seq_along(parents), function(i, dat) {

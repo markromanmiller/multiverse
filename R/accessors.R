@@ -70,7 +70,7 @@ expand.multiverse <- function(multiverse) {
     }
     df <- tibble(.universe = seq(1:n))
   } else {
-    df <- filter(df, eval(all_conditions))
+    df <- slice(filter(df, eval(all_conditions)), attr(multiverse, "valid_universes"))
     n <- nrow(df)
     param.assgn =  lapply(seq_len(n), function(i) lapply(df, "[[", i))
     .code = lapply(seq_len(n), get_code_universe, .m_list = .m_list, .level = length(.m_list))
