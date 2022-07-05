@@ -50,39 +50,20 @@ expand.multiverse <- function(multiverse) {
   .m_obj = attr(multiverse, "multiverse")
   .m_list = .m_obj$multiverse_diction$as_list()
   
-  df <- data.frame( lapply(expand.grid(rev(.m_obj$parameters), KEEP.OUT.ATTRS = FALSE), unlist), stringsAsFactors = FALSE ) %>%
-    select(names(.m_obj$parameters))
+  # asserting this is only one entry
+  stopifnot(length(.m_list) == 1)
+  .entry_name <- names(.m_list)
   
-  if (length(.m_obj$conditions) > 0) {
-    all_conditions <- parse_expr(paste0("(", .m_obj$conditions, ")", collapse = "&"))
-  } else {
-    all_conditions <- expr(TRUE)
-  }
+  n <- length(.m_list[[.entry_name]])
   
-  if (nrow(df) == 0) {
-    n <- 1
-    param.assgn =  list(list())
-    .code = list(code(multiverse))
-    if (length(.m_list) == 0) {
-      .res = list(list())
-    } else {
-      .res = lapply( unlist(unname(tail(.m_list, n = 1)), recursive = FALSE), `[[`, "env" )
-    }
-    df <- tibble(.universe = seq(1:n))
-  } else {
-    df <- slice(filter(df, eval(all_conditions)), attr(multiverse, "valid_universes"))
-    n <- nrow(df)
-    param.assgn =  lapply(seq_len(n), function(i) lapply(df, "[[", i))
-    .code = lapply(seq_len(n), get_code_universe, .m_list = .m_list, .level = length(.m_list))
-    .res = lapply( unlist(unname(tail(.m_list, n = 1)), recursive = FALSE), `[[`, "env" )
-  }
-  
-  select(mutate(as_tibble(df), 
-                      .universe = 1:nrow(df), 
-                      .parameter_assignment = param.assgn, 
-                      .code = .code, 
-                      .results = .res
-                    ), .universe, everything())
+  tibble(
+    .universe = seq_len(n),
+    param.assign = lapply(seq_len(n), function(i) {.m_list[[.entry_name]][[i]][["parameter_assignment"]]}),
+    .parameter_assignment = lapply(seq_len(n), function(i) {.m_list[[.entry_name]][[i]][["parameter_assignment"]]}),
+    .code = lapply(seq_len(n), get_code_universe, .m_list = .m_list, .level = length(.m_list)),
+    .results = lapply( unlist(unname(tail(.m_list, n = 1)), recursive = FALSE), `[[`, "env" )
+  ) %>%
+    unnest_wider(param.assign)
 }
 
 

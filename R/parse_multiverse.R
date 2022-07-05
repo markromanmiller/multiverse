@@ -103,37 +103,76 @@ parse_multiverse <- function(.multiverse, .expr, .code, .label) {
   invisible( m_obj$multiverse_diction$set(.label, q) )
 }
 
+conditional_clusters <- function(parameter_names, conditions) {
+  # parameter_names <- names(.param_options)
+  # conditions <- all_conditions
+  
+  connections <- sapply(conditions, function(x) {parameter_names %in% all.names(x)})
+  
+  groupings <- rep(0, length(parameter_names))
+  next_group_id <- 1
+  
+  result <- list()
+  
+  while(any(groupings == 0)) {
+    old_parameter_indexes <- numeric()
+    new_parameter_indexes <- which(groupings == 0)[[1]]
+    while(!identical(old_parameter_indexes, new_parameter_indexes)) {
+      old_parameter_indexes <- new_parameter_indexes
+      condition_indexes <- which(colSums(connections[old_parameter_indexes, , drop = FALSE]) > 0)
+      new_parameter_indexes <- unique(sort(c(old_parameter_indexes, which(rowSums(connections[, condition_indexes, drop = FALSE]) > 0))))
+    }
+    groupings[new_parameter_indexes] <- next_group_id
+    result[[next_group_id]] <- list(
+      "parameter_names" = parameter_names[new_parameter_indexes],
+      "conditions" = conditions[condition_indexes]
+    )
+    next_group_id <- next_group_id + 1
+  }
+  result
+}
+
 parse_multiverse_expr <- function(multiverse, .expr, .param_options, all_conditions, .parent_block) {
   .m_obj <- attr(multiverse, "multiverse")
   .super_env <- attr(multiverse, "multiverse_super_env")
   .universe_sampling_fn <- attr(multiverse, "universe_sampling_fn")
   if (is.null(.universe_sampling_fn)) {.universe_sampling_fn <- identity}
   
-  if (is_empty(all_conditions)) {
-    all_conditions <- expr(TRUE) 
-  } else { 
-    # creates a chained expression with all the conditions 
-    all_conditions <- parse_expr(paste0("(", all_conditions, ")", collapse = "&"))
-  }
+  # At this point:
   
-  new_params <- setdiff(names(.param_options), .m_obj$parameter_set)
+  df_clusters <- lapply(
+    conditional_clusters(names(.param_options), all_conditions), 
+    function(cluster) {
+      if (is_empty(cluster$conditions)) {
+        cluster_conditions <- expr(TRUE) 
+      } else { 
+        # creates a chained expression with all the conditions 
+        cluster_conditions <- parse_expr(paste0("(", cluster$conditions, ")", collapse = "&"))
+      }
+      
+      df <- data.frame( lapply(expand.grid(.param_options[cluster$parameter_names], KEEP.OUT.ATTRS = FALSE), unlist), stringsAsFactors = FALSE)
+      df <- filter(df, eval(cluster_conditions))
+      df
+    }
+  )
+  
+  
+  params_df <- bind_cols(lapply(df_clusters, .universe_sampling_fn))
+
+  # use the sampling to choose e.g. a number or a proportion of values
+  
+  
+  # return a list of lists that contain env, parent, parameter assignment, and code.
+  
+  # new_params <- setdiff(names(.param_options), .m_obj$parameter_set)
   
   ## take a parameter set from the previous level and a parameter set from the current level, do a set diff
   ## do the expand_grid of the set of new parameters
   ## for each node in the previous level, take the parameter assignment of the previous with the new parameter assignments
   if (is.null(.parent_block)) {
-    df <- data.frame( lapply(expand.grid(.param_options, KEEP.OUT.ATTRS = FALSE), unlist), stringsAsFactors = FALSE)
-    df <- filter(df, eval(all_conditions))
-    n <- ifelse(nrow(df), nrow(df), 1)
     
-    #browser()
-    .valid_universes <- .universe_sampling_fn(seq_len(n))
-    attr(multiverse, "valid_universes") <- .valid_universes
-    
-    lapply(.valid_universes, function(i) {
-      .p <- lapply(df, "[[", i)
-      
-      #browser()
+    lapply(seq_len(nrow(params_df)), function(i) {
+      .p <- lapply(params_df, "[[", i)
       
       list(
         env = new.env(parent = .super_env),
@@ -143,39 +182,7 @@ parse_multiverse_expr <- function(multiverse, .expr, .param_options, all_conditi
       )
     })
   } else {
-    warning("layers that aren't sampled correctly, oops")
-    parents <- .m_obj$multiverse_diction$get(.parent_block)
-    
-    q <- lapply(seq_along(parents), function(i, dat) {
-      if (length(new_params) == 0) {
-        # implies no new parameters have been declared.
-        # so number of child environments should be the same as the number of parent environments
-        df <- data.frame(parents[[i]]$parameter_assignment)
-      } else {
-        df <- data.frame( lapply(expand.grid(.param_options[new_params], KEEP.OUT.ATTRS = FALSE), unlist), stringsAsFactors = FALSE)
-        
-        if (! (is_empty(parents[[i]]$parameter_assignment)) ) {
-          df <- cbind(df, parents[[i]]$parameter_assignment)
-        }
-        
-        df <- filter(df, eval(all_conditions))
-      }
-      
-      n <- ifelse(nrow(df), nrow(df), 1)
-      
-      lapply(seq_len(n), function(j) {
-        .p <- lapply(df, "[[", j)
-        
-        list(
-          env = new.env(parent = parents[[i]]$env),
-          parent = i,
-          parameter_assignment = .p, 
-          code = get_code(.expr, .p)
-        )
-      })
-    }, dat = df)
-    
-    unlist(q, recursive = FALSE)
+    stop("i cut this code because the layers wouln't be sampled correctly... time to write a lot more code.")
   }
 }
 
