@@ -132,13 +132,18 @@ conditional_clusters <- function(parameter_names, conditions) {
   result
 }
 
+sample_all_universes <- function(df_clusters) {
+  expand.grid(df_clusters, KEEP.OUT.ATTRS = F, stringsAsFactors = F)
+}
+
 parse_multiverse_expr <- function(multiverse, .expr, .param_options, all_conditions, .parent_block) {
   .m_obj <- attr(multiverse, "multiverse")
   .super_env <- attr(multiverse, "multiverse_super_env")
   .universe_sampling_fn <- attr(multiverse, "universe_sampling_fn")
-  if (is.null(.universe_sampling_fn)) {.universe_sampling_fn <- identity}
+  if (is.null(.universe_sampling_fn)) {
+    .universe_sampling_fn <- sample_all_universes
+  }
   
-  # At this point:
   
   df_clusters <- lapply(
     conditional_clusters(names(.param_options), all_conditions), 
@@ -156,8 +161,7 @@ parse_multiverse_expr <- function(multiverse, .expr, .param_options, all_conditi
     }
   )
   
-  
-  params_df <- bind_cols(lapply(df_clusters, .universe_sampling_fn))
+  params_df <- .universe_sampling_fn(df_clusters)
 
   # use the sampling to choose e.g. a number or a proportion of values
   
